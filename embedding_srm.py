@@ -18,9 +18,8 @@ emb_names = {'gpt2': 'GPT-2',
              'glove300': 'GloVe (300d)',
              'glove50': 'GloVe (50d)',
              'word2vec': 'word2vec',
-             'decoder': 'brain (decoder 129d)',
-             'decoder79': 'brain (decoder 79d)',
-             'raw79': 'brain (raw 79d)'}
+             'decoder869': 'brain (stack)',
+             'decoder79': 'brain (average)'}
 
 
 # Load and compile all embeddings
@@ -48,11 +47,8 @@ def zscore_cv(train, test, axis=0):
     return train_z, test_z
 
 
-# 10-fold cross-validation splitter
+# Initialize 10-fold cross-validation splitter
 cv = KFold(n_splits=10)
-
-for i, (train_ids, test_ids) in enumerate(cv.split(np.arange(n_embs))):
-    print(i, len(train_ids), len(test_ids))
 
 
 # Initialize SRM with fixed number of features
@@ -126,10 +122,31 @@ sns.heatmap(corr_sq, vmin=0, vmax=1, cmap='plasma', annot=True,
             xticklabels=emb_names.values(),
             yticklabels=emb_names.values())
 plt.title("Correlations after pairwise cross-validated SRM")
+plt.tight_layout()
+plt.savefig(join('figures', 'corr_mat_all.png'),
+            dpi=300, transparent=True)
 
 
-# Bootstrapping correlations to get 95% CIs
-decoder_name = 'decoder79'
+# Get correlation matrix with only semantic models (no brain)
+corr_sq_sem = corr_sq[:7, :7]
+sns.set_context('notebook', font_scale=1)
+fig, ax = plt.subplots(figsize=(7, 7))
+sns.heatmap(corr_sq_sem, vmin=0, vmax=1, cmap='plasma', annot=True,
+            fmt='.3f', cbar=True, square=True, ax=ax,
+            cbar_kws={'label': 'correlation',
+                      'fraction': 0.046, 'pad': 0.04},
+            xticklabels=list(emb_names.values())[:7],
+            yticklabels=list(emb_names.values())[:7])
+plt.title("Correlations after pairwise cross-validated SRM")
+plt.tight_layout()
+plt.savefig(join('figures', 'corr_mat_sem.png'),
+            dpi=300, transparent=True)
+
+
+# Create brain-only correlations table
+decoder_name = 'decoder869'
+exclude = ['decoder79']
+
 decoder_corrs = {p: correlation_pairs[p] for p in emb_pairs
                  if decoder_name in p}
 decoder_labels = {}
@@ -139,7 +156,6 @@ for pair in decoder_corrs:
             decoder_labels[pair] = p
 
 decoder_df = pd.DataFrame(decoder_corrs)
-exclude = ['decoder', 'raw79']
 decoder_df.columns = decoder_labels.values()
 decoder_df = decoder_df[[l for l in decoder_labels.values()
                          if l not in exclude]]
@@ -155,6 +171,10 @@ def fisher_mean(correlations):
 fig, ax = plt.subplots(figsize=(6, 5))
 sns.barplot(x='representation', y='correlation', data=decoder_df,
             estimator=fisher_mean, color=".70")
+plt.ylim(0, .25)
 plt.xticks(rotation=45)
 plt.title(f"Correlation with {emb_names[decoder_name]}\n"
           "after cross-validated SRM")
+plt.tight_layout()
+plt.savefig(join('figures', 'barplot_corr_brain869.png'),
+            dpi=300, transparent=True)
