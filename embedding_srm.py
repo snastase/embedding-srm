@@ -165,8 +165,8 @@ decoder_df = pd.melt(decoder_df, var_name='representation',
 
 
 # Custom mean estimator with Fisher z transformation for correlations
-def fisher_mean(correlations):
-    return np.tanh(np.mean(np.arctanh(correlations)))
+def fisher_mean(correlations, axis=None):
+    return np.tanh(np.mean(np.arctanh(correlations), axis=axis))
 
 fig, ax = plt.subplots(figsize=(6, 5))
 sns.barplot(x='representation', y='correlation', data=decoder_df,
@@ -254,3 +254,19 @@ plt.title("Differences in correlation with "
 plt.tight_layout()
 plt.savefig(join('figures', 'corr_diff_mat_brain869.png'),
             dpi=300, transparent=True)
+
+
+# Test difference between contextual and static embeddings
+context_names = ['gpt2', 'bart', 'roberta', 'xlnet']
+context_corr = fisher_mean([decoder_corrs[d] for d in decoder_corrs
+                        if d in context_names], axis=0)
+
+static_names = ['glove300', 'glove50', 'word2vec']
+static_corr = fisher_mean([decoder_corrs[d] for d in decoder_corrs
+                       if d in static_names], axis=0)
+
+diff_corr = context_corr - static_corr
+mean_diff = fisher_mean(diff_corr)
+
+null_dist = permute_differences(diff_corr, summary=fisher_mean)
+p_val = p_from_null(mean_diff, null_dist)
