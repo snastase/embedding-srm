@@ -4,7 +4,7 @@ import pandas as pd
 from itertools import combinations
 from sklearn.model_selection import KFold
 from brainiak.funcalign.srm import SRM
-from brainiak.utils.utils import array_correlation
+from brainiak.utils.utils import array_correlation, p_from_null
 from scipy.spatial.distance import squareform
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -130,7 +130,7 @@ plt.savefig(join('figures', 'corr_mat_all.png'),
 # Get correlation matrix with only semantic models (no brain)
 corr_sq_sem = corr_sq[:7, :7]
 sns.set_context('notebook', font_scale=1)
-fig, ax = plt.subplots(figsize=(7, 7))
+fig, ax = plt.subplots(figsize=(8, 8))
 sns.heatmap(corr_sq_sem, vmin=0, vmax=1, cmap='plasma', annot=True,
             fmt='.3f', cbar=True, square=True, ax=ax,
             cbar_kws={'label': 'correlation',
@@ -177,4 +177,80 @@ plt.title(f"Correlation with {emb_names[decoder_name]}\n"
           "after cross-validated SRM")
 plt.tight_layout()
 plt.savefig(join('figures', 'barplot_corr_brain869.png'),
+            dpi=300, transparent=True)
+
+
+# Differences between semantic model correlations with brain
+decoder_corrs = {decoder_labels[d]: decoder_corrs[d]
+                 for d in decoder_corrs}
+decoder_corrs = {d: decoder_corrs[d] for d in
+                 decoder_corrs if d not in exclude}
+model_labels = [emb_names[d] for d in decoder_corrs]
+dec_pairs = list(combinations(decoder_corrs, 2))
+diff_pairs = {d: decoder_corrs[d[0]] - decoder_corrs[d[1]]
+              for d in dec_pairs}
+
+
+# Get mean differences and visualize
+mean_pairs = {d: fisher_mean(diff_pairs[d]) for d in diff_pairs}
+mean_vec = [mean_pairs[d] for d in dec_pairs]
+mean_mat = squareform(mean_vec, checks=False)
+fig, ax = plt.subplots(figsize=(7, 7))
+sns.heatmap(mean_mat, vmin=-.15, vmax=.15, cmap='RdBu_r', annot=True,
+            fmt='.3f', cbar=True, square=True, ax=ax,
+            cbar_kws={'label': 'difference in correlation',
+                      'fraction': 0.046, 'pad': 0.04},
+            xticklabels=model_labels,
+            yticklabels=model_labels)
+plt.title("Differences in correlation with "
+          f"{emb_names[decoder_name]}")
+plt.tight_layout()
+plt.savefig(join('figures', 'corr_diff_mat.png'),
+            dpi=300, transparent=True)
+
+
+# Generate permutation-based null distribution
+def permute_differences(differences, n_perms=1000, summary=None):
+    null_distribution = []
+    for p in np.arange(n_perms):
+        sign_flipper = np.random.choice([-1, 1], len(differences))
+        permutation = sign_flipper * differences
+        if summary:
+            permutation = summary(permutation)
+        null_distribution.append(permutation)
+    return np.array(null_distribution)
+
+
+# Compute permutation p-values for each pair of models
+p_pairs = {}
+for pair in diff_pairs:
+    null_dist = permute_differences(diff_pairs[pair], summary=fisher_mean)
+    p_pairs[pair] = p_from_null(mean_pairs[pair], null_dist)
+p_vec = [p_pairs[d] for d in dec_pairs]
+p_mat = squareform(p_vec, checks=False)
+
+p_mat_str = np.char.mod('%.3f', p_mat)
+mean_mat_str = np.char.mod('%.3f', mean_mat)
+annot_mat = np.empty(p_mat.shape, dtype='<U20')
+for i in np.arange(p_mat.shape[0]):
+    for j in np.arange(p_mat.shape[1]):
+        if i != j:
+            annot_mat[i, j] = '\n'.join([mean_mat_str[i, j],
+                                         '('+ p_mat_str[i, j] + ')'])
+        else:
+            annot_mat[i, j] = '0'
+        
+fig, ax = plt.subplots(figsize=(7, 7))
+sns.heatmap(mean_mat, vmin=-.15, vmax=.15, cmap='RdBu_r',
+            annot=annot_mat, fmt='', annot_kws={'size': 10}, 
+            cbar=True, square=True, ax=ax,
+            cbar_kws={'label': 'difference in correlation',
+                      'fraction': 0.046, 'pad': 0.04},
+            xticklabels=model_labels,
+            yticklabels=model_labels)
+plt.title("Differences in correlation with "
+          f"{emb_names[decoder_name]}\n"
+          "(with permutation-based p-values)")
+plt.tight_layout()
+plt.savefig(join('figures', 'corr_diff_mat_brain869.png'),
             dpi=300, transparent=True)
