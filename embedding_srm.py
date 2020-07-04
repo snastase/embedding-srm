@@ -270,3 +270,20 @@ mean_diff = fisher_mean(diff_corr)
 
 null_dist = permute_differences(diff_corr, summary=fisher_mean)
 p_val = p_from_null(mean_diff, null_dist)
+
+fig, ax = plt.subplots(figsize=(6, 4))
+sns.distplot(null_dist, kde=False, color=".3", ax=ax)
+plt.vlines(mean_diff, 0, 100, color='maroon')
+plt.xlabel('difference in correlation (contextual – static)')
+plt.yticks([])
+ax.text(mean_diff - .0015, 100,
+        f'observed difference\n{mean_diff:.3f} (p < {p_val:.3f})',
+        ha='right', va='top')
+ax.text(.003, 100,
+        f'permutation-based\nnull distribution',
+        ha='left', va='top')
+plt.title("Difference between contextual and static semantic\n"
+          f"model correlations with {emb_names[decoder_name]}");
+plt.tight_layout()
+plt.savefig(join('figures', 'corr_diff_context-vs-static_brain869.png'),
+            dpi=300, transparent=True)
